@@ -1,8 +1,14 @@
 type: object
+required:
+  - code
+  - message
+
 properties:
   code:
     type: integer
     description: HTTP-код ошибки
+    example: 0
   message:
     type: string
-    description: Описание ошибки 
+    description: Описание ошибки
+    example: Шаблон ошибки

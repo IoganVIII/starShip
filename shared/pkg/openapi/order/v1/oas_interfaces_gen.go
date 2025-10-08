@@ -4,3 +4,15 @@ package order_v1
 type CreateOrderRes interface {
 	createOrderRes()
 }
+
+type GetOrderInfoRes interface {
+	getOrderInfoRes()
+}
+
+type OrderCancelRes interface {
+	orderCancelRes()
+}
+
+type OrderPayRes interface {
+	orderPayRes()
+}

@@ -1,8 +1,8 @@
 post:
-  summary: create order by ship
-  operationId: createOrder
+  summary: Создаёт заказ на космический корабль
+  operationId: CreateOrder
   tags:
-    - createOrder
+    - CreateOrder
   requestBody:
     required: true
     content:

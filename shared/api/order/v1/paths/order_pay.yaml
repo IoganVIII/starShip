@@ -1,0 +1,45 @@
+parameters:
+  - $ref: ../params/order_uuid.yaml
+
+post:
+  summary: order pay
+  operationId: OrderPay
+  tags:
+    - OrderPay
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: ../components/pay_order_request.yaml
+  responses:
+    '200':
+      description: Information successfully order pay
+      content:
+        application/json:
+          schema:
+            $ref: ../components/pay_order_response.yaml
+    '400':
+      description: Bad request - validation error
+      content:
+        application/json:
+          schema:
+            $ref: ../components/errors/bad_request_error.yaml
+    '404':
+      description: Bad request - validation error
+      content:
+        application/json:
+          schema:
+            $ref: ../components/errors/not_found_error.yaml
+    '500':
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: ../components/errors/internal_server_error.yaml
+    default:
+      description: Unexpected error
+      content:
+        application/json:
+          schema:
+            $ref: ../components/errors/generic_error.yaml

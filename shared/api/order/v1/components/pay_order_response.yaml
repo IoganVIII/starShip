@@ -1,0 +1,9 @@
+type: object
+required:
+  - transaction_uuid
+properties:
+  order_uuid:
+    type: string
+    format: uuid
+    description: ИД транзакции
+    example: "11967e23-1535-49b6-9271-953715d308b4"

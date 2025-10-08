@@ -10,10 +10,9 @@ properties:
     example: "11967e23-1535-49b6-9271-953715d308b1"
   part_uuids:
     type: array
-    format: uuid
     items:
-            type: string
-            format: uuid
+      type: string
+      format: uuid
     description: ИД запчастей
     example: 
             - "6ba7b810-9dad-11d1-80b4-00c04fd430c8"

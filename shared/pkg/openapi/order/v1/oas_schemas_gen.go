@@ -5,6 +5,7 @@ package order_v1
 import (
 	"fmt"
 
+	"github.com/go-faster/errors"
 	"github.com/google/uuid"
 )
 
@@ -40,7 +41,40 @@ func (s *BadRequestError) SetMessage(val string) {
 	s.Message = val
 }
 
-func (*BadRequestError) createOrderRes() {}
+func (*BadRequestError) createOrderRes()  {}
+func (*BadRequestError) getOrderInfoRes() {}
+func (*BadRequestError) orderCancelRes()  {}
+func (*BadRequestError) orderPayRes()     {}
+
+// Ref: #/components/schemas/conflict_error
+type ConflictError struct {
+	// HTTP-код ошибки.
+	Code int `json:"code"`
+	// Описание ошибки.
+	Message string `json:"message"`
+}
+
+// GetCode returns the value of Code.
+func (s *ConflictError) GetCode() int {
+	return s.Code
+}
+
+// GetMessage returns the value of Message.
+func (s *ConflictError) GetMessage() string {
+	return s.Message
+}
+
+// SetCode sets the value of Code.
+func (s *ConflictError) SetCode(val int) {
+	s.Code = val
+}
+
+// SetMessage sets the value of Message.
+func (s *ConflictError) SetMessage(val string) {
+	s.Message = val
+}
+
+func (*ConflictError) orderCancelRes() {}
 
 // Ref: #/components/schemas/create_order_request
 type CreateOrderRequest struct {
@@ -103,28 +137,28 @@ func (*CreateOrderResponse) createOrderRes() {}
 // Ref: #/components/schemas/generic_error
 type GenericError struct {
 	// HTTP-код ошибки.
-	Code OptInt `json:"code"`
+	Code int `json:"code"`
 	// Описание ошибки.
-	Message OptString `json:"message"`
+	Message string `json:"message"`
 }
 
 // GetCode returns the value of Code.
-func (s *GenericError) GetCode() OptInt {
+func (s *GenericError) GetCode() int {
 	return s.Code
 }
 
 // GetMessage returns the value of Message.
-func (s *GenericError) GetMessage() OptString {
+func (s *GenericError) GetMessage() string {
 	return s.Message
 }
 
 // SetCode sets the value of Code.
-func (s *GenericError) SetCode(val OptInt) {
+func (s *GenericError) SetCode(val int) {
 	s.Code = val
 }
 
 // SetMessage sets the value of Message.
-func (s *GenericError) SetMessage(val OptString) {
+func (s *GenericError) SetMessage(val string) {
 	s.Message = val
 }
 
@@ -154,6 +188,94 @@ func (s *GenericErrorStatusCode) SetResponse(val GenericError) {
 	s.Response = val
 }
 
+// Ref: #/components/schemas/get_order_response
+type GetOrderResponse struct {
+	// Уникальный идентификатор заказа.
+	OrderUUID uuid.UUID `json:"order_uuid"`
+	// Уникальный идентификатор пользователя.
+	UserUUID uuid.UUID `json:"user_uuid"`
+	// Список идентификаторов деталей/компонентов заказа.
+	PartUuids []uuid.UUID `json:"part_uuids"`
+	// Общая стоимость заказа.
+	TotalPrice float32 `json:"total_price"`
+	// Уникальный идентификатор транзакции.
+	TransactionUUID uuid.UUID     `json:"transaction_uuid"`
+	PaymentMethod   PaymentMethod `json:"payment_method"`
+	Status          OrderStatus   `json:"status"`
+}
+
+// GetOrderUUID returns the value of OrderUUID.
+func (s *GetOrderResponse) GetOrderUUID() uuid.UUID {
+	return s.OrderUUID
+}
+
+// GetUserUUID returns the value of UserUUID.
+func (s *GetOrderResponse) GetUserUUID() uuid.UUID {
+	return s.UserUUID
+}
+
+// GetPartUuids returns the value of PartUuids.
+func (s *GetOrderResponse) GetPartUuids() []uuid.UUID {
+	return s.PartUuids
+}
+
+// GetTotalPrice returns the value of TotalPrice.
+func (s *GetOrderResponse) GetTotalPrice() float32 {
+	return s.TotalPrice
+}
+
+// GetTransactionUUID returns the value of TransactionUUID.
+func (s *GetOrderResponse) GetTransactionUUID() uuid.UUID {
+	return s.TransactionUUID
+}
+
+// GetPaymentMethod returns the value of PaymentMethod.
+func (s *GetOrderResponse) GetPaymentMethod() PaymentMethod {
+	return s.PaymentMethod
+}
+
+// GetStatus returns the value of Status.
+func (s *GetOrderResponse) GetStatus() OrderStatus {
+	return s.Status
+}
+
+// SetOrderUUID sets the value of OrderUUID.
+func (s *GetOrderResponse) SetOrderUUID(val uuid.UUID) {
+	s.OrderUUID = val
+}
+
+// SetUserUUID sets the value of UserUUID.
+func (s *GetOrderResponse) SetUserUUID(val uuid.UUID) {
+	s.UserUUID = val
+}
+
+// SetPartUuids sets the value of PartUuids.
+func (s *GetOrderResponse) SetPartUuids(val []uuid.UUID) {
+	s.PartUuids = val
+}
+
+// SetTotalPrice sets the value of TotalPrice.
+func (s *GetOrderResponse) SetTotalPrice(val float32) {
+	s.TotalPrice = val
+}
+
+// SetTransactionUUID sets the value of TransactionUUID.
+func (s *GetOrderResponse) SetTransactionUUID(val uuid.UUID) {
+	s.TransactionUUID = val
+}
+
+// SetPaymentMethod sets the value of PaymentMethod.
+func (s *GetOrderResponse) SetPaymentMethod(val PaymentMethod) {
+	s.PaymentMethod = val
+}
+
+// SetStatus sets the value of Status.
+func (s *GetOrderResponse) SetStatus(val OrderStatus) {
+	s.Status = val
+}
+
+func (*GetOrderResponse) getOrderInfoRes() {}
+
 // Ref: #/components/schemas/internal_server_error
 type InternalServerError struct {
 	// HTTP-код ошибки.
@@ -182,40 +304,75 @@ func (s *InternalServerError) SetMessage(val string) {
 	s.Message = val
 }
 
-func (*InternalServerError) createOrderRes() {}
+func (*InternalServerError) createOrderRes()  {}
+func (*InternalServerError) getOrderInfoRes() {}
+func (*InternalServerError) orderCancelRes()  {}
+func (*InternalServerError) orderPayRes()     {}
 
-// NewOptInt returns new OptInt with value set to v.
-func NewOptInt(v int) OptInt {
-	return OptInt{
+// Ref: #/components/schemas/not_found_error
+type NotFoundError struct {
+	// HTTP-код ошибки.
+	Code int `json:"code"`
+	// Описание ошибки.
+	Message string `json:"message"`
+}
+
+// GetCode returns the value of Code.
+func (s *NotFoundError) GetCode() int {
+	return s.Code
+}
+
+// GetMessage returns the value of Message.
+func (s *NotFoundError) GetMessage() string {
+	return s.Message
+}
+
+// SetCode sets the value of Code.
+func (s *NotFoundError) SetCode(val int) {
+	s.Code = val
+}
+
+// SetMessage sets the value of Message.
+func (s *NotFoundError) SetMessage(val string) {
+	s.Message = val
+}
+
+func (*NotFoundError) getOrderInfoRes() {}
+func (*NotFoundError) orderCancelRes()  {}
+func (*NotFoundError) orderPayRes()     {}
+
+// NewOptUUID returns new OptUUID with value set to v.
+func NewOptUUID(v uuid.UUID) OptUUID {
+	return OptUUID{
 		Value: v,
 		Set:   true,
 	}
 }
 
-// OptInt is optional int.
-type OptInt struct {
-	Value int
+// OptUUID is optional uuid.UUID.
+type OptUUID struct {
+	Value uuid.UUID
 	Set   bool
 }
 
-// IsSet returns true if OptInt was set.
-func (o OptInt) IsSet() bool { return o.Set }
+// IsSet returns true if OptUUID was set.
+func (o OptUUID) IsSet() bool { return o.Set }
 
 // Reset unsets value.
-func (o *OptInt) Reset() {
-	var v int
+func (o *OptUUID) Reset() {
+	var v uuid.UUID
 	o.Value = v
 	o.Set = false
 }
 
 // SetTo sets value to v.
-func (o *OptInt) SetTo(v int) {
+func (o *OptUUID) SetTo(v uuid.UUID) {
 	o.Set = true
 	o.Value = v
 }
 
 // Get returns value and boolean that denotes whether value was set.
-func (o OptInt) Get() (v int, ok bool) {
+func (o OptUUID) Get() (v uuid.UUID, ok bool) {
 	if !o.Set {
 		return v, false
 	}
@@ -223,55 +380,161 @@ func (o OptInt) Get() (v int, ok bool) {
 }
 
 // Or returns value if set, or given parameter if does not.
-func (o OptInt) Or(d int) int {
+func (o OptUUID) Or(d uuid.UUID) uuid.UUID {
 	if v, ok := o.Get(); ok {
 		return v
 	}
 	return d
 }
 
-// NewOptString returns new OptString with value set to v.
-func NewOptString(v string) OptString {
-	return OptString{
-		Value: v,
-		Set:   true,
+// OrderCancelNoContent is response for OrderCancel operation.
+type OrderCancelNoContent struct{}
+
+func (*OrderCancelNoContent) orderCancelRes() {}
+
+// Статус заказа.
+// Ref: #/components/schemas/order_status
+type OrderStatus string
+
+const (
+	OrderStatusPENDINGPAYMENT OrderStatus = "PENDING_PAYMENT"
+	OrderStatusPAID           OrderStatus = "PAID"
+	OrderStatusCANCELLED      OrderStatus = "CANCELLED"
+)
+
+// AllValues returns all OrderStatus values.
+func (OrderStatus) AllValues() []OrderStatus {
+	return []OrderStatus{
+		OrderStatusPENDINGPAYMENT,
+		OrderStatusPAID,
+		OrderStatusCANCELLED,
 	}
 }
 
-// OptString is optional string.
-type OptString struct {
-	Value string
-	Set   bool
-}
-
-// IsSet returns true if OptString was set.
-func (o OptString) IsSet() bool { return o.Set }
-
-// Reset unsets value.
-func (o *OptString) Reset() {
-	var v string
-	o.Value = v
-	o.Set = false
-}
-
-// SetTo sets value to v.
-func (o *OptString) SetTo(v string) {
-	o.Set = true
-	o.Value = v
-}
-
-// Get returns value and boolean that denotes whether value was set.
-func (o OptString) Get() (v string, ok bool) {
-	if !o.Set {
-		return v, false
+// MarshalText implements encoding.TextMarshaler.
+func (s OrderStatus) MarshalText() ([]byte, error) {
+	switch s {
+	case OrderStatusPENDINGPAYMENT:
+		return []byte(s), nil
+	case OrderStatusPAID:
+		return []byte(s), nil
+	case OrderStatusCANCELLED:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
 	}
-	return o.Value, true
 }
 
-// Or returns value if set, or given parameter if does not.
-func (o OptString) Or(d string) string {
-	if v, ok := o.Get(); ok {
-		return v
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *OrderStatus) UnmarshalText(data []byte) error {
+	switch OrderStatus(data) {
+	case OrderStatusPENDINGPAYMENT:
+		*s = OrderStatusPENDINGPAYMENT
+		return nil
+	case OrderStatusPAID:
+		*s = OrderStatusPAID
+		return nil
+	case OrderStatusCANCELLED:
+		*s = OrderStatusCANCELLED
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
 	}
-	return d
+}
+
+// Ref: #/components/schemas/pay_order_request
+type PayOrderRequest struct {
+	PaymentMethod PaymentMethod `json:"payment_method"`
+}
+
+// GetPaymentMethod returns the value of PaymentMethod.
+func (s *PayOrderRequest) GetPaymentMethod() PaymentMethod {
+	return s.PaymentMethod
+}
+
+// SetPaymentMethod sets the value of PaymentMethod.
+func (s *PayOrderRequest) SetPaymentMethod(val PaymentMethod) {
+	s.PaymentMethod = val
+}
+
+// Ref: #/components/schemas/pay_order_response
+type PayOrderResponse struct {
+	// ИД транзакции.
+	OrderUUID OptUUID `json:"order_uuid"`
+}
+
+// GetOrderUUID returns the value of OrderUUID.
+func (s *PayOrderResponse) GetOrderUUID() OptUUID {
+	return s.OrderUUID
+}
+
+// SetOrderUUID sets the value of OrderUUID.
+func (s *PayOrderResponse) SetOrderUUID(val OptUUID) {
+	s.OrderUUID = val
+}
+
+func (*PayOrderResponse) orderPayRes() {}
+
+// Метод оплаты.
+// Ref: #/components/schemas/payment_method
+type PaymentMethod string
+
+const (
+	PaymentMethodUNKNOWN       PaymentMethod = "UNKNOWN"
+	PaymentMethodCARD          PaymentMethod = "CARD"
+	PaymentMethodSBP           PaymentMethod = "SBP"
+	PaymentMethodCREDITCARD    PaymentMethod = "CREDIT_CARD"
+	PaymentMethodINVESTORMONEY PaymentMethod = "INVESTOR_MONEY"
+)
+
+// AllValues returns all PaymentMethod values.
+func (PaymentMethod) AllValues() []PaymentMethod {
+	return []PaymentMethod{
+		PaymentMethodUNKNOWN,
+		PaymentMethodCARD,
+		PaymentMethodSBP,
+		PaymentMethodCREDITCARD,
+		PaymentMethodINVESTORMONEY,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s PaymentMethod) MarshalText() ([]byte, error) {
+	switch s {
+	case PaymentMethodUNKNOWN:
+		return []byte(s), nil
+	case PaymentMethodCARD:
+		return []byte(s), nil
+	case PaymentMethodSBP:
+		return []byte(s), nil
+	case PaymentMethodCREDITCARD:
+		return []byte(s), nil
+	case PaymentMethodINVESTORMONEY:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *PaymentMethod) UnmarshalText(data []byte) error {
+	switch PaymentMethod(data) {
+	case PaymentMethodUNKNOWN:
+		*s = PaymentMethodUNKNOWN
+		return nil
+	case PaymentMethodCARD:
+		*s = PaymentMethodCARD
+		return nil
+	case PaymentMethodSBP:
+		*s = PaymentMethodSBP
+		return nil
+	case PaymentMethodCREDITCARD:
+		*s = PaymentMethodCREDITCARD
+		return nil
+	case PaymentMethodINVESTORMONEY:
+		*s = PaymentMethodINVESTORMONEY
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
