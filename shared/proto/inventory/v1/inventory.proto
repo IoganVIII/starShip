@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+// Package inventory.v1 содержит API для работы с запчастями для космичееских кораблей
+package inventory.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/IoganVIII/starShip/shared/pkg/proto/inventory/v1;inventory_v1";
+
+// InventoryService предоставляет API для работы с запчастями для космичееских кораблей
+service InventoryService {
+  // GetPart возвращает информацию о детали по её UUID
+  rpc GetPart(GetPartRequest) returns (GetPartResponse);
+
+  // ListParts Возвращает список деталей с возможностью фильтрации
+  rpc ListParts(ListPartsRequest) returns (ListPartsResponse);
+}
+
+// GetPartRequest содержит идентификатор детали
+message GetPartRequest {
+  // uuid Идентификатор детали
+  string uuid = 1;
+}
+
+// GetPartResponse получает деталь
+message GetPartResponse {
+    // Part Информация о детали
+    Part part = 1;
+}
+
+// ListPartsRequest содержит фильтр для деталей
+message ListPartsRequest {
+  // filter Фильтр по деталям (все поля опциональны)
+  PartsFilter filter = 1;
+}
+
+// ListPartsResponse содержит фильтр для деталей
+message ListPartsResponse {
+  // parts список деталей
+  repeated Part parts = 1;
+}
+
+// Сообщение для фильтрации деталей
+message PartsFilter {
+  repeated string uuids = 1;
+  repeated string names = 2;
+  repeated Category categories = 3;
+  repeated string manufacturer_countries = 4;
+  repeated string tags = 5;
+}
+
+// Part Описание запчасти
+message Part {
+  string uuid = 1;
+  string name = 2;
+  string description = 3;
+  double price = 4;
+  int64 stock_quantity = 5;
+  Category category = 6;
+  Dimensions dimensions = 7;
+  Manufacturer manufacturer = 8;
+  repeated string tags = 9;
+  map<string, Value> metadata = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+}
+
+// Category перечисление категорий деталей
+enum Category {
+  UNKNOWN = 0;
+  ENGINE = 1;
+  FUEL = 2;
+  PORTHOLE = 3;
+  WING = 4;
+}
+
+// Dimensions размеры детали
+message Dimensions {
+  double length = 1;  // Длина в см
+  double width = 2;   // Ширина в см
+  double height = 3;  // Высота в см
+  double weight = 4;  // Вес в кг
+}
+
+// Manufacturer производитель
+message Manufacturer {
+  string name = 1;     // Название
+  string country = 2;  // Страна производства
+  string website = 3;  // Сайт производителя
+}
+
+// Значение для метаданных
+message Value {
+  oneof value {
+    string string_value = 1;
+    int64 int64_value = 2;
+    double double_value = 3;
+    bool bool_value = 4;
+  }
+}

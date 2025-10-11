@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	orderv1 "github.com/IoganVIII/starShip/shared/pkg/openapi/order/v1"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	orderv1 "github.com/IoganVIII/starShip/shared/pkg/openapi/order/v1"
 )
 
 const (
@@ -136,5 +136,4 @@ func main() {
 	}
 
 	log.Println("✅ Сервер остановлен")
-
 }
