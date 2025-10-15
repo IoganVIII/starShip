@@ -77,6 +77,13 @@ func (s *OrderService) CreateOrder(
 	s.storage.mu.Lock()
 	defer s.storage.mu.Unlock()
 
+	if req == nil {
+		return &orderV1.InternalServerError{
+			Code:    http.StatusInternalServerError,
+			Message: "request is empty",
+		}, nil
+	}
+
 	partsUuidString := make([]string, 0, len(req.PartUuids))
 	for _, partID := range req.PartUuids {
 		partsUuidString = append(partsUuidString, partID.String())
@@ -87,13 +94,22 @@ func (s *OrderService) CreateOrder(
 		},
 	})
 	if err != nil {
-		return nil, err
+		return &orderV1.InternalServerError{
+			Code:    http.StatusInternalServerError,
+			Message: err.Error(),
+		}, nil
 	}
 	if res == nil {
-		return nil, errors.New("invalid argument: empty result from ListParts")
+		return &orderV1.InternalServerError{
+			Code:    http.StatusInternalServerError,
+			Message: "invalid argument: empty result from ListParts",
+		}, nil
 	}
 	if len(res.Parts) != len(req.PartUuids) {
-		return nil, errors.New("count part response unequal count part request")
+		return &orderV1.InternalServerError{
+			Code:    http.StatusInternalServerError,
+			Message: "count part response unequal count part request",
+		}, nil
 	}
 	var totalPrice float64 = 0
 	for _, item := range res.Parts {
@@ -125,9 +141,13 @@ func (s *OrderService) GetOrderInfo(
 ) (orderV1.GetOrderInfoRes, error) {
 	s.storage.mu.Lock()
 	defer s.storage.mu.Unlock()
+
 	order, ok := s.storage.orders[req.OrderUUID.String()]
 	if !ok {
-		return nil, errors.New("order is not found by: " + req.OrderUUID.String())
+		return &orderV1.NotFoundError{
+			Code:    http.StatusNotFound,
+			Message: fmt.Sprintf("order is not found by: %s", req.OrderUUID),
+		}, nil
 	}
 	return &orderV1.GetOrderResponse{
 		OrderUUID:       order.OrderUUID,
@@ -150,13 +170,13 @@ func (s *OrderService) OrderCancel(
 	order, ok := s.storage.orders[req.OrderUUID.String()]
 	if !ok {
 		return &orderV1.NotFoundError{
-			Code:    404,
+			Code:    http.StatusNotFound,
 			Message: fmt.Sprintf("order is not found by: %s", req.OrderUUID.String()),
 		}, nil
 	}
 	if order.Status == orderV1.OrderStatusPAID {
 		return &orderV1.ConflictError{
-			Code:    409,
+			Code:    http.StatusConflict,
 			Message: "order is paid",
 		}, nil
 	}
@@ -178,7 +198,7 @@ func (s *OrderService) OrderPay(
 	order, ok := s.storage.orders[params.OrderUUID.String()]
 	if !ok {
 		return &orderV1.NotFoundError{
-			Code:    404,
+			Code:    http.StatusNotFound,
 			Message: fmt.Sprintf("order is not found by: %s", params.OrderUUID.String()),
 		}, nil
 	}
@@ -201,10 +221,16 @@ func (s *OrderService) OrderPay(
 		PaymentMethod: payOrderRequestPaymentMehod,
 	})
 	if err != nil {
-		return nil, errors.New("123")
+		return &orderV1.InternalServerError{
+			Code:    http.StatusInternalServerError,
+			Message: fmt.Sprintf("error invoke grpc payOrder: %s", err.Error()),
+		}, nil
 	}
 	if payOrderRes == nil {
-		return nil, errors.New("1234")
+		return &orderV1.InternalServerError{
+			Code:    http.StatusInternalServerError,
+			Message: "response form grpc payOrder is emty",
+		}, nil
 	}
 
 	order.Status = orderV1.OrderStatusPAID
@@ -215,10 +241,16 @@ func (s *OrderService) OrderPay(
 	}, nil
 }
 
-func (h *OrderService) NewError(
+func (s *OrderService) NewError(
 	ctx context.Context, err error,
 ) *orderV1.GenericErrorStatusCode {
-	return nil
+	return &orderV1.GenericErrorStatusCode{
+		StatusCode: http.StatusInternalServerError,
+		Response: orderV1.GenericError{
+			Code:    http.StatusInternalServerError,
+			Message: err.Error(),
+		},
+	}
 }
 
 func NewInventoryServiceClient() (*inventoryV1.InventoryServiceClient, error) {
@@ -264,6 +296,7 @@ func main() {
 	ordersServer, err := orderV1.NewServer(orderService)
 	if err != nil {
 		log.Fatalf("Error create ordersServer: %v", err)
+		return
 	}
 
 	r := chi.NewRouter()
