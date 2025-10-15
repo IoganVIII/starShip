@@ -1,4 +1,8 @@
 ## workspace
+# github.com/brianvoe/gofakeit v3.18.0+incompatible
+## explicit
+github.com/brianvoe/gofakeit
+github.com/brianvoe/gofakeit/data
 # github.com/dlclark/regexp2 v1.11.5
 ## explicit; go 1.13
 github.com/dlclark/regexp2

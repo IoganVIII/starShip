@@ -5,6 +5,7 @@ go 1.24.6
 require google.golang.org/grpc v1.76.0
 
 require (
+	github.com/brianvoe/gofakeit v3.18.0+incompatible
 	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
