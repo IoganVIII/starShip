@@ -29,7 +29,7 @@ type PaymentService struct {
 // PayOrder метод оплаты заказа.
 func (s *PaymentService) PayOrder(ctx context.Context, req *paymentV1.PayOrderRequest) (*paymentV1.PayOrderResponse, error) {
 	if req == nil {
-		return nil, status.Errorf(codes.InvalidArgument, "request is empty")
+		return nil, status.Error(codes.InvalidArgument, "request is empty")
 	}
 	_, err := uuid.Parse(req.OrderUuid)
 	if err != nil {
@@ -37,7 +37,7 @@ func (s *PaymentService) PayOrder(ctx context.Context, req *paymentV1.PayOrderRe
 	}
 	_, err = uuid.Parse(req.UserUuid)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	orderID := uuid.New()

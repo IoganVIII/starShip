@@ -122,7 +122,7 @@ func (s *InventoryService) ListParts(ctx context.Context, req *inventoryV1.ListP
 		if req.Filter.Categories != nil && !containsCategories(req.Filter.Categories, part.Category) {
 			continue
 		}
-		if req.Filter.ManufacturerCountries != nil && !containsName(req.Filter.ManufacturerCountries, part.Manufacturer.Country) {
+		if req.Filter.ManufacturerCountries != nil && !containsManufacturerCountries(req.Filter.ManufacturerCountries, part.Manufacturer.Country) {
 			continue
 		}
 		if req.Filter.Tags != nil && !containsTags(req.Filter.Tags, part.Tags) {
@@ -301,8 +301,8 @@ func containsTags(sourceTags, target []string) bool {
 }
 
 // Проверка вхождения страны производства в массив
-func containsManufacturerCountries(Countries []string, target string) bool {
-	return containsString(Countries, target)
+func containsManufacturerCountries(countries []string, target string) bool {
+	return containsString(countries, target)
 }
 
 // Проверка вхождения категории в массив

@@ -157,7 +157,7 @@ func (s *OrderService) OrderCancel(
 	if order.Status == orderV1.OrderStatusPAID {
 		return &orderV1.ConflictError{
 			Code:    409,
-			Message: fmt.Sprint("order is paid"),
+			Message: "order is paid",
 		}, nil
 	}
 	if order.Status == orderV1.OrderStatusPENDINGPAYMENT {
@@ -227,8 +227,7 @@ func NewInventoryServiceClient() (*inventoryV1.InventoryServiceClient, error) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		log.Printf("failed to connect InventoryService: %v\n", err)
-		return nil, errors.New(fmt.Sprintf("failed to connect InventoryService: %v\n", err))
+		return nil, fmt.Errorf("failed to connect InventoryService: %w", err)
 	}
 	inventoryServiceClient := inventoryV1.NewInventoryServiceClient(InventoryServiceConnection)
 	return &inventoryServiceClient, nil
@@ -240,8 +239,7 @@ func NewPaymentServiceClient() (*paymentV1.PaymentServiceClient, error) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		log.Printf("failed to connect PaymentService: %v\n", err)
-		return nil, errors.New(fmt.Sprintf("failed to connect PaymentService: %v\n", err))
+		return nil, fmt.Errorf("failed to connect PaymentService: %w", err)
 	}
 	paymentServiceClient := paymentV1.NewPaymentServiceClient(PaymentServiceConnection)
 	return &paymentServiceClient, nil
