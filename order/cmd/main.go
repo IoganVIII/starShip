@@ -67,6 +67,9 @@ func NewOrdersHandler(storage *OrdersStorage) *OrdersHandler {
 func (h *OrdersHandler) CreateOrder(
 	ctx context.Context, req *orderV1.CreateOrderRequest,
 ) (orderV1.CreateOrderRes, error) {
+	h.storage.mu.Lock()
+	defer h.storage.mu.Unlock()
+
 	partsUuidString := make([]string, 0, len(req.PartUuids))
 	for _, partID := range req.PartUuids {
 		partsUuidString = append(partsUuidString, partID.String())
@@ -94,7 +97,6 @@ func (h *OrdersHandler) CreateOrder(
 		partResponseIDs = append(partResponseIDs, uuid.MustParse(item.Uuid))
 	}
 	orderID := uuid.New()
-	h.storage.mu.Lock()
 	h.storage.orders[orderID.String()] = &orderV1.GetOrderResponse{
 		OrderUUID:       orderID,
 		UserUUID:        req.UserUUID,
@@ -104,7 +106,6 @@ func (h *OrdersHandler) CreateOrder(
 		PaymentMethod:   orderV1.PaymentMethodUNKNOWN,
 		Status:          orderV1.OrderStatusPENDINGPAYMENT,
 	}
-	h.storage.mu.Unlock()
 	return &orderV1.CreateOrderResponse{
 		OrderUUID:  orderID,
 		TotalPrice: float32(totalPrice),
@@ -115,6 +116,7 @@ func (h *OrdersHandler) GetOrderInfo(
 	ctx context.Context, req orderV1.GetOrderInfoParams,
 ) (orderV1.GetOrderInfoRes, error) {
 	h.storage.mu.Lock()
+	defer h.storage.mu.Unlock()
 	order, ok := h.storage.orders[req.OrderUUID.String()]
 	if !ok {
 		return nil, errors.New("order is not found by: " + req.OrderUUID.String())
@@ -125,8 +127,8 @@ func (h *OrdersHandler) GetOrderInfo(
 		PartUuids:       order.PartUuids,
 		TotalPrice:      order.TotalPrice,
 		TransactionUUID: order.TransactionUUID,
-		PaymentMethod:   orderV1.PaymentMethodCARD,
-		Status:          orderV1.OrderStatusPAID,
+		PaymentMethod:   order.PaymentMethod,
+		Status:          order.Status,
 	}, nil
 }
 
@@ -198,7 +200,9 @@ func (h *OrdersHandler) OrderPay(
 	order.Status = orderV1.OrderStatusPAID
 	order.TransactionUUID = uuid.MustParse(payOrderRes.TransactionUuid)
 	h.storage.orders[order.OrderUUID.String()] = order
-	return nil, nil
+	return &orderV1.PayOrderResponse{
+		OrderUUID: orderV1.NewOptUUID(order.TransactionUUID),
+	}, nil
 }
 
 func (h *OrdersHandler) NewError(
