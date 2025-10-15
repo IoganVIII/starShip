@@ -11,4 +11,4 @@ properties:
   message:
     type: string
     description: Описание ошибки
-    example: Шаблон ошибки
+    example: Template error

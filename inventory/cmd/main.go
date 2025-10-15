@@ -11,6 +11,8 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/brianvoe/gofakeit"
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
@@ -18,31 +20,70 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	inventoryV1 "github.com/IoganVIII/starShip/shared/pkg/proto/inventory/v1"
-	"github.com/brianvoe/gofakeit"
-	"github.com/google/uuid"
 )
 
+// grpcPort порт на котором запускается сервис.
 const grpcPort = 50051
 
+// InventoryService сервис для работы с запчастями кораблей.
 type InventoryService struct {
 	inventoryV1.UnimplementedInventoryServiceServer
 
 	mu      sync.RWMutex
-	storage map[string]*inventoryV1.Part
+	storage *Storage
 }
 
-func (s *InventoryService) GetPart(ctx context.Context, req *inventoryV1.GetPartRequest) (*inventoryV1.GetPartResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// NewInventoryService конструктор сервиса InventoryService.
+func NewInventoryService() *InventoryService {
+	inventoryService := &InventoryService{
+		storage: NewStorage(),
+	}
+	inventoryService.initParts()
 
+	return inventoryService
+}
+
+// Storage потокобезопасный стор для хранения запчастей.
+type Storage struct {
+	mu    sync.RWMutex
+	parts map[string]*inventoryV1.Part
+}
+
+// NewStorage конструктор потокобезопасного стора.
+func NewStorage() *Storage {
+	return &Storage{
+		parts: make(map[string]*inventoryV1.Part),
+	}
+}
+
+// Set добавить элемент в стор.
+func (store *Storage) Set(key string, value *inventoryV1.Part) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.parts[key] = value
+}
+
+// Get получить элемент из стора.
+func (store *Storage) Get(key string) (*inventoryV1.Part, bool) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	value, ok := store.parts[key]
+	return value, ok
+}
+
+// GetPart получить запчасть под идентификатору.
+func (s *InventoryService) GetPart(ctx context.Context, req *inventoryV1.GetPartRequest) (*inventoryV1.GetPartResponse, error) {
+	if req == nil {
+		return nil, status.Errorf(codes.InvalidArgument, "request is empty")
+	}
 	partID, err := uuid.Parse(req.Uuid)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "Невалидное значение идентификатора \"partID\": %s", partID)
+		return nil, status.Errorf(codes.InvalidArgument, "invalid argument \"partID\": %s", partID)
 	}
 
-	part, ok := s.storage[partID.String()]
+	part, ok := s.storage.Get(partID.String())
 	if !ok {
-		return nil, status.Errorf(codes.NotFound, "Не найдена деталь по идентификатору: %s", partID)
+		return nil, status.Errorf(codes.NotFound, "not found part by ID: %s", partID)
 	}
 
 	return &inventoryV1.GetPartResponse{
@@ -50,14 +91,19 @@ func (s *InventoryService) GetPart(ctx context.Context, req *inventoryV1.GetPart
 	}, nil
 }
 
+// ListParts получить список запчастей по фильтру.
 func (s *InventoryService) ListParts(ctx context.Context, req *inventoryV1.ListPartsRequest) (*inventoryV1.ListPartsResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if req == nil {
+		return nil, status.Errorf(codes.InvalidArgument, "request is empty")
+	}
+
 	partListResponse := make([]*inventoryV1.Part, 0)
 	if req.Filter == nil {
-		partListResponse = make([]*inventoryV1.Part, 0, len(s.storage))
-		for _, part := range s.storage {
+		partListResponse = make([]*inventoryV1.Part, 0, len(s.storage.parts))
+		for _, part := range s.storage.parts {
 			partListResponse = append(partListResponse, part)
 		}
 
@@ -66,7 +112,7 @@ func (s *InventoryService) ListParts(ctx context.Context, req *inventoryV1.ListP
 		}, nil
 	}
 
-	for partID, part := range s.storage {
+	for partID, part := range s.storage.parts {
 		if req.Filter.Uuids != nil && !containsUUID(req.Filter.Uuids, partID) {
 			continue
 		}
@@ -90,11 +136,12 @@ func (s *InventoryService) ListParts(ctx context.Context, req *inventoryV1.ListP
 	}, nil
 }
 
+// initParts инициализирует стор запчастей.
 func (s *InventoryService) initParts() {
 	parts := generateParts()
 
 	for _, part := range parts {
-		s.storage[part.Uuid] = part
+		s.storage.Set(part.Uuid, part)
 	}
 }
 
@@ -242,7 +289,7 @@ func containsName(names []string, target string) bool {
 }
 
 // Проверка вхождения тэгов в массив
-func containsTags(sourceTags []string, target []string) bool {
+func containsTags(sourceTags, target []string) bool {
 	for _, sourceTagItem := range sourceTags {
 		for _, t := range target {
 			if sourceTagItem == t {
@@ -280,25 +327,16 @@ func main() {
 		}
 	}()
 
-	// Создаем gRPC сервер
 	s := grpc.NewServer()
-
-	// Регистрируем наш сервис
-	service := &InventoryService{
-		storage: make(map[string]*inventoryV1.Part),
-	}
-	service.initParts()
-
+	service := NewInventoryService()
 	inventoryV1.RegisterInventoryServiceServer(s, service)
-
-	// Включаем рефлексию для отладки
 	reflection.Register(s)
 
 	go func() {
-		log.Printf("🚀 gRPC server listening on %d\n", grpcPort)
+		log.Printf("🚀 gRPC InventoryService listening on %d\n", grpcPort)
 		err = s.Serve(lis)
 		if err != nil {
-			log.Printf("failed to serve: %v\n", err)
+			log.Printf("failed to InventoryService: %v\n", err)
 			return
 		}
 	}()
@@ -307,7 +345,7 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("🛑 Shutting down gRPC server...")
+	log.Println("🛑 Shutting down gRPC InventoryService...")
 	s.GracefulStop()
-	log.Println("✅ Server stopped")
+	log.Println("✅ InventoryService stopped")
 }

@@ -11,20 +11,38 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/grpc/status"
 
 	paymentV1 "github.com/IoganVIII/starShip/shared/pkg/proto/payment/v1"
 )
 
+// grpcPort порт на котором запускается сервис.
 const grpcPort = 50052
 
+// PaymentService сервия для оплаты заказов.
 type PaymentService struct {
 	paymentV1.UnimplementedPaymentServiceServer
 }
 
-func (s *PaymentService) PayOrder(context.Context, *paymentV1.PayOrderRequest) (*paymentV1.PayOrderResponse, error) {
+// PayOrder метод оплаты заказа.
+func (s *PaymentService) PayOrder(ctx context.Context, req *paymentV1.PayOrderRequest) (*paymentV1.PayOrderResponse, error) {
+	if req == nil {
+		return nil, status.Errorf(codes.InvalidArgument, "request is empty")
+	}
+	_, err := uuid.Parse(req.OrderUuid)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	_, err = uuid.Parse(req.UserUuid)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+	}
+
 	orderID := uuid.New()
-	log.Printf("Оплата прошла успешно, transaction_uuid: %s", orderID)
+	log.Printf("pay order complete, transaction_uuid: %s", orderID)
+
 	return &paymentV1.PayOrderResponse{
 		TransactionUuid: orderID.String(),
 	}, nil
@@ -42,22 +60,16 @@ func main() {
 		}
 	}()
 
-	// Создаем gRPC сервер
 	s := grpc.NewServer()
-
-	// Регистрируем наш сервис
 	service := &PaymentService{}
-
 	paymentV1.RegisterPaymentServiceServer(s, service)
-
-	// Включаем рефлексию для отладки
 	reflection.Register(s)
 
 	go func() {
-		log.Printf("🚀 gRPC server listening on %d\n", grpcPort)
+		log.Printf("🚀 gRPC PaymentService listening on %d\n", grpcPort)
 		err = s.Serve(lis)
 		if err != nil {
-			log.Printf("failed to serve: %v\n", err)
+			log.Printf("failed to PaymentService: %v\n", err)
 			return
 		}
 	}()
@@ -66,7 +78,7 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("🛑 Shutting down gRPC server...")
+	log.Println("🛑 Shutting down gRPC PaymentService...")
 	s.GracefulStop()
-	log.Println("✅ Server stopped")
+	log.Println("✅ PaymentService stopped")
 }

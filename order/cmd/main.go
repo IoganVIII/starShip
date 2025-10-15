@@ -34,7 +34,7 @@ const (
 	PaymentServiceAddress   = "localhost:50052"
 )
 
-// OrdersStorage Потокобезопасное хранилище для заказов.
+// OrdersStorage хранилище для заказов.
 type OrdersStorage struct {
 	mu sync.RWMutex
 	// TODO - Не нравится как называется модель, можно ли как-то переделать?
@@ -49,32 +49,39 @@ func NewOrderStorage() *OrdersStorage {
 	}
 }
 
-// OrdersHandler реализует интерфейс ordersV1.Handler для обработки запросов заказов.
-type OrdersHandler struct {
+// OrderService реализует интерфейс ordersV1.Handler для обработки запросов заказов.
+type OrderService struct {
 	storage *OrdersStorage
 
 	inventoryServiceClient inventoryV1.InventoryServiceClient
 	paymentServiceClient   paymentV1.PaymentServiceClient
 }
 
-// NewOrdersHandler создает новый обработчик заказов.
-func NewOrdersHandler(storage *OrdersStorage) *OrdersHandler {
-	return &OrdersHandler{
-		storage: storage,
+// NewOrderService создает новый обработчик заказов.
+func NewOrderService(
+	storage *OrdersStorage,
+	inventoryServiceClient *inventoryV1.InventoryServiceClient,
+	paymentServiceClient *paymentV1.PaymentServiceClient,
+) *OrderService {
+	return &OrderService{
+		storage:                storage,
+		inventoryServiceClient: *inventoryServiceClient,
+		paymentServiceClient:   *paymentServiceClient,
 	}
 }
 
-func (h *OrdersHandler) CreateOrder(
+// CreateOrder создать заказ.
+func (s *OrderService) CreateOrder(
 	ctx context.Context, req *orderV1.CreateOrderRequest,
 ) (orderV1.CreateOrderRes, error) {
-	h.storage.mu.Lock()
-	defer h.storage.mu.Unlock()
+	s.storage.mu.Lock()
+	defer s.storage.mu.Unlock()
 
 	partsUuidString := make([]string, 0, len(req.PartUuids))
 	for _, partID := range req.PartUuids {
 		partsUuidString = append(partsUuidString, partID.String())
 	}
-	res, err := h.inventoryServiceClient.ListParts(ctx, &inventoryV1.ListPartsRequest{
+	res, err := s.inventoryServiceClient.ListParts(ctx, &inventoryV1.ListPartsRequest{
 		Filter: &inventoryV1.PartsFilter{
 			Uuids: partsUuidString,
 		},
@@ -97,7 +104,7 @@ func (h *OrdersHandler) CreateOrder(
 		partResponseIDs = append(partResponseIDs, uuid.MustParse(item.Uuid))
 	}
 	orderID := uuid.New()
-	h.storage.orders[orderID.String()] = &orderV1.GetOrderResponse{
+	s.storage.orders[orderID.String()] = &orderV1.GetOrderResponse{
 		OrderUUID:       orderID,
 		UserUUID:        req.UserUUID,
 		PartUuids:       partResponseIDs,
@@ -112,12 +119,13 @@ func (h *OrdersHandler) CreateOrder(
 	}, nil
 }
 
-func (h *OrdersHandler) GetOrderInfo(
+// GetOrderInfo получить информацию о заказе.
+func (s *OrderService) GetOrderInfo(
 	ctx context.Context, req orderV1.GetOrderInfoParams,
 ) (orderV1.GetOrderInfoRes, error) {
-	h.storage.mu.Lock()
-	defer h.storage.mu.Unlock()
-	order, ok := h.storage.orders[req.OrderUUID.String()]
+	s.storage.mu.Lock()
+	defer s.storage.mu.Unlock()
+	order, ok := s.storage.orders[req.OrderUUID.String()]
 	if !ok {
 		return nil, errors.New("order is not found by: " + req.OrderUUID.String())
 	}
@@ -132,13 +140,14 @@ func (h *OrdersHandler) GetOrderInfo(
 	}, nil
 }
 
-func (h *OrdersHandler) OrderCancel(
+// OrderCancel отменить заказ.
+func (s *OrderService) OrderCancel(
 	ctx context.Context, req orderV1.OrderCancelParams,
 ) (orderV1.OrderCancelRes, error) {
-	h.storage.mu.Lock()
-	defer h.storage.mu.Unlock()
+	s.storage.mu.Lock()
+	defer s.storage.mu.Unlock()
 
-	order, ok := h.storage.orders[req.OrderUUID.String()]
+	order, ok := s.storage.orders[req.OrderUUID.String()]
 	if !ok {
 		return &orderV1.NotFoundError{
 			Code:    404,
@@ -153,19 +162,20 @@ func (h *OrdersHandler) OrderCancel(
 	}
 	if order.Status == orderV1.OrderStatusPENDINGPAYMENT {
 		order.Status = orderV1.OrderStatusCANCELLED
-		h.storage.orders[order.OrderUUID.String()] = order
+		s.storage.orders[order.OrderUUID.String()] = order
 	}
 
 	return nil, nil
 }
 
-func (h *OrdersHandler) OrderPay(
+// OrderPay оплатить заказ.
+func (s *OrderService) OrderPay(
 	ctx context.Context, req *orderV1.PayOrderRequest, params orderV1.OrderPayParams,
 ) (orderV1.OrderPayRes, error) {
-	h.storage.mu.Lock()
-	defer h.storage.mu.Unlock()
+	s.storage.mu.Lock()
+	defer s.storage.mu.Unlock()
 
-	order, ok := h.storage.orders[params.OrderUUID.String()]
+	order, ok := s.storage.orders[params.OrderUUID.String()]
 	if !ok {
 		return &orderV1.NotFoundError{
 			Code:    404,
@@ -185,7 +195,7 @@ func (h *OrdersHandler) OrderPay(
 	default:
 		payOrderRequestPaymentMehod = paymentV1.PaymentMethod_UNKNOWN
 	}
-	payOrderRes, err := h.paymentServiceClient.PayOrder(ctx, &paymentV1.PayOrderRequest{
+	payOrderRes, err := s.paymentServiceClient.PayOrder(ctx, &paymentV1.PayOrderRequest{
 		UserUuid:      order.UserUUID.String(),
 		OrderUuid:     order.OrderUUID.String(),
 		PaymentMethod: payOrderRequestPaymentMehod,
@@ -199,45 +209,64 @@ func (h *OrdersHandler) OrderPay(
 
 	order.Status = orderV1.OrderStatusPAID
 	order.TransactionUUID = uuid.MustParse(payOrderRes.TransactionUuid)
-	h.storage.orders[order.OrderUUID.String()] = order
+	s.storage.orders[order.OrderUUID.String()] = order
 	return &orderV1.PayOrderResponse{
 		OrderUUID: orderV1.NewOptUUID(order.TransactionUUID),
 	}, nil
 }
 
-func (h *OrdersHandler) NewError(
+func (h *OrderService) NewError(
 	ctx context.Context, err error,
 ) *orderV1.GenericErrorStatusCode {
 	return nil
 }
 
-func main() {
-	storage := NewOrderStorage()
-	ordersHandler := NewOrdersHandler(storage)
-	ordersServer, err := orderV1.NewServer(ordersHandler)
-	if err != nil {
-		log.Fatalf("Ошибка создания сервера order: %v", err)
-	}
-
+func NewInventoryServiceClient() (*inventoryV1.InventoryServiceClient, error) {
 	InventoryServiceConnection, err := grpc.NewClient(
 		InventoryServiceAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		log.Printf("failed to connect InventoryService: %v\n", err)
-		return
+		return nil, errors.New(fmt.Sprintf("failed to connect InventoryService: %v\n", err))
 	}
-	ordersHandler.inventoryServiceClient = inventoryV1.NewInventoryServiceClient(InventoryServiceConnection)
+	inventoryServiceClient := inventoryV1.NewInventoryServiceClient(InventoryServiceConnection)
+	return &inventoryServiceClient, nil
+}
 
+func NewPaymentServiceClient() (*paymentV1.PaymentServiceClient, error) {
 	PaymentServiceConnection, err := grpc.NewClient(
 		PaymentServiceAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		log.Printf("failed to connect InventoryService: %v\n", err)
+		log.Printf("failed to connect PaymentService: %v\n", err)
+		return nil, errors.New(fmt.Sprintf("failed to connect PaymentService: %v\n", err))
+	}
+	paymentServiceClient := paymentV1.NewPaymentServiceClient(PaymentServiceConnection)
+	return &paymentServiceClient, nil
+}
+
+func main() {
+	inventoryServiceClient, err := NewInventoryServiceClient()
+	if err != nil {
+		log.Fatalf("Error create inventoryServiceClient: %v", err)
 		return
 	}
-	ordersHandler.paymentServiceClient = paymentV1.NewPaymentServiceClient(PaymentServiceConnection)
+	paymentServiceClient, err := NewPaymentServiceClient()
+	if err != nil {
+		log.Fatalf("Error create paymentServiceClient: %v", err)
+		return
+	}
+	orderService := NewOrderService(
+		NewOrderStorage(),
+		inventoryServiceClient,
+		paymentServiceClient,
+	)
+	ordersServer, err := orderV1.NewServer(orderService)
+	if err != nil {
+		log.Fatalf("Error create ordersServer: %v", err)
+	}
 
 	r := chi.NewRouter()
 
@@ -271,10 +300,6 @@ func main() {
 	// Создаем контекст с таймаутом для остановки сервера
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer func() {
-		if cerr := InventoryServiceConnection.Close(); cerr != nil {
-			log.Printf("failed to close connect InventoryService: %v", cerr)
-		}
-
 		cancel()
 	}()
 
