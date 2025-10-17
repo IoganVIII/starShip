@@ -28,3 +28,4 @@
 /node_modules
 /shared/api/bundles/
 /coverage/
+/vendor
