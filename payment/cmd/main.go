@@ -28,16 +28,9 @@ type PaymentService struct {
 
 // PayOrder метод оплаты заказа.
 func (s *PaymentService) PayOrder(ctx context.Context, req *paymentV1.PayOrderRequest) (*paymentV1.PayOrderResponse, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is empty")
-	}
-	_, err := uuid.Parse(req.OrderUuid)
+	err := s.payOrderValidateRequest(req)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
-	_, err = uuid.Parse(req.UserUuid)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+		return nil, err
 	}
 
 	orderID := uuid.New()
@@ -46,6 +39,22 @@ func (s *PaymentService) PayOrder(ctx context.Context, req *paymentV1.PayOrderRe
 	return &paymentV1.PayOrderResponse{
 		TransactionUuid: orderID.String(),
 	}, nil
+}
+
+func (s *PaymentService) payOrderValidateRequest(req *paymentV1.PayOrderRequest) error {
+	if req == nil {
+		return status.Error(codes.InvalidArgument, "request is empty")
+	}
+	_, err := uuid.Parse(req.OrderUuid)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	_, err = uuid.Parse(req.UserUuid)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	return nil
 }
 
 func main() {
