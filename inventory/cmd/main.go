@@ -28,8 +28,6 @@ const grpcPort = 50051
 // InventoryService сервис для работы с запчастями кораблей.
 type InventoryService struct {
 	inventoryV1.UnimplementedInventoryServiceServer
-
-	mu      sync.RWMutex
 	storage *Storage
 }
 
@@ -65,10 +63,21 @@ func (store *Storage) Set(key string, value *inventoryV1.Part) {
 
 // Get получить элемент из стора.
 func (store *Storage) Get(key string) (*inventoryV1.Part, bool) {
-	store.mu.Lock()
-	defer store.mu.Unlock()
+	store.mu.RLock()
+	defer store.mu.RUnlock()
 	value, ok := store.parts[key]
 	return value, ok
+}
+
+// Get получить элемент из стора.
+func (store *Storage) GetAllParts() []*inventoryV1.Part {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	parts := make([]*inventoryV1.Part, 0, len(store.parts))
+	for _, part := range store.parts {
+		parts = append(parts, part)
+	}
+	return parts
 }
 
 // GetPart получить запчасть под идентификатору.
@@ -93,9 +102,6 @@ func (s *InventoryService) GetPart(ctx context.Context, req *inventoryV1.GetPart
 
 // ListParts получить список запчастей по фильтру.
 func (s *InventoryService) ListParts(ctx context.Context, req *inventoryV1.ListPartsRequest) (*inventoryV1.ListPartsResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if req == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "request is empty")
 	}
@@ -112,8 +118,8 @@ func (s *InventoryService) ListParts(ctx context.Context, req *inventoryV1.ListP
 		}, nil
 	}
 
-	for partID, part := range s.storage.parts {
-		if req.Filter.Uuids != nil && !containsUUID(req.Filter.Uuids, partID) {
+	for _, part := range s.storage.GetAllParts() {
+		if req.Filter.Uuids != nil && !containsUUID(req.Filter.Uuids, part.Uuid) {
 			continue
 		}
 		if req.Filter.Names != nil && !containsName(req.Filter.Names, part.Name) {

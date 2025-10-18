@@ -54,7 +54,7 @@ func (s *CreateOrderResponse) Validate() error {
 	return nil
 }
 
-func (s *GetOrderResponse) Validate() error {
+func (s *OrderDto) Validate() error {
 	if s == nil {
 		return validate.ErrNilPointer
 	}
@@ -92,8 +92,15 @@ func (s *GetOrderResponse) Validate() error {
 		})
 	}
 	if err := func() error {
-		if err := s.PaymentMethod.Validate(); err != nil {
-			return err
+		if value, ok := s.PaymentMethod.Get(); ok {
+			if err := func() error {
+				if err := value.Validate(); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
 		}
 		return nil
 	}(); err != nil {

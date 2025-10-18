@@ -34,24 +34,37 @@ const (
 	PaymentServiceAddress   = "localhost:50052"
 )
 
-// OrdersStorage хранилище для заказов.
-type OrdersStorage struct {
-	mu sync.RWMutex
-	// TODO - Не нравится как называется модель, можно ли как-то переделать?
-	// Почему так важно возрат объекта по ссылке?
-	orders map[string]*orderV1.GetOrderResponse
+// OrderStorage хранилище для заказов.
+type OrderStorage struct {
+	mu     sync.RWMutex
+	orders map[string]*orderV1.OrderDto
 }
 
 // NewOrderStorage создает новое хранилище заказов.
-func NewOrderStorage() *OrdersStorage {
-	return &OrdersStorage{
-		orders: make(map[string]*orderV1.GetOrderResponse),
+func NewOrderStorage() *OrderStorage {
+	return &OrderStorage{
+		orders: make(map[string]*orderV1.OrderDto),
 	}
+}
+
+// Set добавить элемент в стор.
+func (store *OrderStorage) Set(key string, value *orderV1.OrderDto) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.orders[key] = value
+}
+
+// Get получить элемент из стора.
+func (store *OrderStorage) Get(key string) (*orderV1.OrderDto, bool) {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	value, ok := store.orders[key]
+	return value, ok
 }
 
 // OrderService реализует интерфейс ordersV1.Handler для обработки запросов заказов.
 type OrderService struct {
-	storage *OrdersStorage
+	storage *OrderStorage
 
 	inventoryServiceClient inventoryV1.InventoryServiceClient
 	paymentServiceClient   paymentV1.PaymentServiceClient
@@ -59,7 +72,7 @@ type OrderService struct {
 
 // NewOrderService создает новый обработчик заказов.
 func NewOrderService(
-	storage *OrdersStorage,
+	storage *OrderStorage,
 	inventoryServiceClient *inventoryV1.InventoryServiceClient,
 	paymentServiceClient *paymentV1.PaymentServiceClient,
 ) *OrderService {
@@ -74,12 +87,9 @@ func NewOrderService(
 func (s *OrderService) CreateOrder(
 	ctx context.Context, req *orderV1.CreateOrderRequest,
 ) (orderV1.CreateOrderRes, error) {
-	s.storage.mu.Lock()
-	defer s.storage.mu.Unlock()
-
 	if req == nil {
-		return &orderV1.InternalServerError{
-			Code:    http.StatusInternalServerError,
+		return &orderV1.BadRequestError{
+			Code:    http.StatusBadRequest,
 			Message: "request is empty",
 		}, nil
 	}
@@ -88,6 +98,9 @@ func (s *OrderService) CreateOrder(
 	for _, partID := range req.PartUuids {
 		partsUuidString = append(partsUuidString, partID.String())
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	res, err := s.inventoryServiceClient.ListParts(ctx, &inventoryV1.ListPartsRequest{
 		Filter: &inventoryV1.PartsFilter{
 			Uuids: partsUuidString,
@@ -106,8 +119,8 @@ func (s *OrderService) CreateOrder(
 		}, nil
 	}
 	if len(res.Parts) != len(req.PartUuids) {
-		return &orderV1.InternalServerError{
-			Code:    http.StatusInternalServerError,
+		return &orderV1.BadRequestError{
+			Code:    http.StatusBadRequest,
 			Message: "count part response unequal count part request",
 		}, nil
 	}
@@ -120,15 +133,13 @@ func (s *OrderService) CreateOrder(
 		partResponseIDs = append(partResponseIDs, uuid.MustParse(item.Uuid))
 	}
 	orderID := uuid.New()
-	s.storage.orders[orderID.String()] = &orderV1.GetOrderResponse{
-		OrderUUID:       orderID,
-		UserUUID:        req.UserUUID,
-		PartUuids:       partResponseIDs,
-		TotalPrice:      float32(totalPrice),
-		TransactionUUID: uuid.Nil,
-		PaymentMethod:   orderV1.PaymentMethodUNKNOWN,
-		Status:          orderV1.OrderStatusPENDINGPAYMENT,
-	}
+	s.storage.Set(orderID.String(), &orderV1.OrderDto{
+		OrderUUID:  orderID,
+		UserUUID:   req.UserUUID,
+		PartUuids:  partResponseIDs,
+		TotalPrice: float32(totalPrice),
+		Status:     orderV1.OrderStatusPENDINGPAYMENT,
+	})
 	return &orderV1.CreateOrderResponse{
 		OrderUUID:  orderID,
 		TotalPrice: float32(totalPrice),
@@ -139,17 +150,14 @@ func (s *OrderService) CreateOrder(
 func (s *OrderService) GetOrderInfo(
 	ctx context.Context, req orderV1.GetOrderInfoParams,
 ) (orderV1.GetOrderInfoRes, error) {
-	s.storage.mu.Lock()
-	defer s.storage.mu.Unlock()
-
-	order, ok := s.storage.orders[req.OrderUUID.String()]
+	order, ok := s.storage.Get(req.OrderUUID.String())
 	if !ok {
 		return &orderV1.NotFoundError{
 			Code:    http.StatusNotFound,
 			Message: fmt.Sprintf("order is not found by: %s", req.OrderUUID),
 		}, nil
 	}
-	return &orderV1.GetOrderResponse{
+	return &orderV1.OrderDto{
 		OrderUUID:       order.OrderUUID,
 		UserUUID:        order.UserUUID,
 		PartUuids:       order.PartUuids,
@@ -164,10 +172,7 @@ func (s *OrderService) GetOrderInfo(
 func (s *OrderService) OrderCancel(
 	ctx context.Context, req orderV1.OrderCancelParams,
 ) (orderV1.OrderCancelRes, error) {
-	s.storage.mu.Lock()
-	defer s.storage.mu.Unlock()
-
-	order, ok := s.storage.orders[req.OrderUUID.String()]
+	order, ok := s.storage.Get(req.OrderUUID.String())
 	if !ok {
 		return &orderV1.NotFoundError{
 			Code:    http.StatusNotFound,
@@ -182,7 +187,7 @@ func (s *OrderService) OrderCancel(
 	}
 	if order.Status == orderV1.OrderStatusPENDINGPAYMENT {
 		order.Status = orderV1.OrderStatusCANCELLED
-		s.storage.orders[order.OrderUUID.String()] = order
+		s.storage.Set(order.OrderUUID.String(), order)
 	}
 
 	return nil, nil
@@ -192,29 +197,22 @@ func (s *OrderService) OrderCancel(
 func (s *OrderService) OrderPay(
 	ctx context.Context, req *orderV1.PayOrderRequest, params orderV1.OrderPayParams,
 ) (orderV1.OrderPayRes, error) {
-	s.storage.mu.Lock()
-	defer s.storage.mu.Unlock()
-
-	order, ok := s.storage.orders[params.OrderUUID.String()]
+	order, ok := s.storage.Get(params.OrderUUID.String())
 	if !ok {
 		return &orderV1.NotFoundError{
 			Code:    http.StatusNotFound,
 			Message: fmt.Sprintf("order is not found by: %s", params.OrderUUID.String()),
 		}, nil
 	}
-	var payOrderRequestPaymentMehod paymentV1.PaymentMethod
-	switch req.PaymentMethod {
-	case orderV1.PaymentMethodCARD:
-		payOrderRequestPaymentMehod = paymentV1.PaymentMethod_CARD
-	case orderV1.PaymentMethodCREDITCARD:
-		payOrderRequestPaymentMehod = paymentV1.PaymentMethod_CREDIT_CARD
-	case orderV1.PaymentMethodINVESTORMONEY:
-		payOrderRequestPaymentMehod = paymentV1.PaymentMethod_INVESTOR_MONEY
-	case orderV1.PaymentMethodSBP:
-		payOrderRequestPaymentMehod = paymentV1.PaymentMethod_SBP
-	default:
-		payOrderRequestPaymentMehod = paymentV1.PaymentMethod_UNKNOWN
+	if order.Status == orderV1.OrderStatusPAID || order.Status == orderV1.OrderStatusCANCELLED {
+		return &orderV1.BadRequestError{
+			Code:    http.StatusBadRequest,
+			Message: fmt.Sprintf("cannot be paid becouse order status: %s", params.OrderUUID.String()),
+		}, nil
 	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	payOrderRequestPaymentMehod := orderV1PaymentMethodToPaymentV1PaymentMethod(req.PaymentMethod)
 	payOrderRes, err := s.paymentServiceClient.PayOrder(ctx, &paymentV1.PayOrderRequest{
 		UserUuid:      order.UserUUID.String(),
 		OrderUuid:     order.OrderUUID.String(),
@@ -234,10 +232,10 @@ func (s *OrderService) OrderPay(
 	}
 
 	order.Status = orderV1.OrderStatusPAID
-	order.TransactionUUID = uuid.MustParse(payOrderRes.TransactionUuid)
-	s.storage.orders[order.OrderUUID.String()] = order
+	order.TransactionUUID.Value = uuid.MustParse(payOrderRes.TransactionUuid)
+	s.storage.Set(order.OrderUUID.String(), order)
 	return &orderV1.PayOrderResponse{
-		OrderUUID: orderV1.NewOptUUID(order.TransactionUUID),
+		OrderUUID: orderV1.NewOptUUID(order.TransactionUUID.Value),
 	}, nil
 }
 
@@ -275,6 +273,25 @@ func NewPaymentServiceClient() (*paymentV1.PaymentServiceClient, error) {
 	}
 	paymentServiceClient := paymentV1.NewPaymentServiceClient(PaymentServiceConnection)
 	return &paymentServiceClient, nil
+}
+
+// orderV1PaymentMethodToPaymentV1PaymentMethod конвертор поля PaymentMethod из интерфейса orderV1 в paymentV1
+func orderV1PaymentMethodToPaymentV1PaymentMethod(paymentMethod orderV1.PaymentMethod) paymentV1.PaymentMethod {
+	var payOrderRequestPaymentMehod paymentV1.PaymentMethod
+	switch paymentMethod {
+	case orderV1.PaymentMethodCARD:
+		payOrderRequestPaymentMehod = paymentV1.PaymentMethod_CARD
+	case orderV1.PaymentMethodCREDITCARD:
+		payOrderRequestPaymentMehod = paymentV1.PaymentMethod_CREDIT_CARD
+	case orderV1.PaymentMethodINVESTORMONEY:
+		payOrderRequestPaymentMehod = paymentV1.PaymentMethod_INVESTOR_MONEY
+	case orderV1.PaymentMethodSBP:
+		payOrderRequestPaymentMehod = paymentV1.PaymentMethod_SBP
+	default:
+		payOrderRequestPaymentMehod = paymentV1.PaymentMethod_UNKNOWN
+	}
+
+	return payOrderRequestPaymentMehod
 }
 
 func main() {
