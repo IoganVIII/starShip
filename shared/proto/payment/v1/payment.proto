@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+// Package payment.v1 содержит API для работы с обработкой команд на оплату
+package payment.v1;
+
+option go_package = "github.com/IoganVIII/starShip/shared/pkg/proto/payment/v1;payment";
+
+// PaymentService Обрабатывает команды на оплату.
+service PaymentService {
+  // PayOrder Обрабатывает команду на оплату и возвращает transaction_uuid
+  rpc PayOrder(PayOrderRequest) returns (PayOrderResponse);
+}
+
+// PayOrderRequest принимает запрос на оплату
+message PayOrderRequest {
+  string order_uuid = 1;
+  string user_uuid = 2;
+  PaymentMethod payment_method = 3;
+}
+
+// PayOrderResponse содержит идентификатор транзакции
+message PayOrderResponse {
+  string transaction_uuid = 1;
+}
+
+// Перечисление способов оплаты
+enum PaymentMethod {
+  UNKNOWN = 0;
+  CARD = 1;
+  SBP = 2;
+  CREDIT_CARD = 3;
+  INVESTOR_MONEY = 4;
+}
